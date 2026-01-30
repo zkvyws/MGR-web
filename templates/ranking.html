@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ranking | Moon Galactic Regimen</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="hologram-container">
+        <header class="main-header">
+            <div class="brand-section">
+                <img src="{{ url_for('static', filename='logo.png') }}" class="logo-static" alt="MGR Logo">
+                <div class="active-badge">
+                    <span class="number">600</span>
+                    <span class="status">ACTIVE!</span>
+                </div>
+            </div>
+            <div class="title-section">
+                <h1 class="main-title">Moon Galactic Regimen</h1>
+                <p class="subtitle">TEMPORADA 1 | MOON GALACTIC LEGENDS</p>
+            </div>
+        </header>
+
+        <section class="filter-section">
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="Buscar guerrero..." onkeyup="filterTable()">
+                <div class="select-wrapper">
+                    <select id="tierFilter" onchange="filterTable()">
+                        <option value="">Todos los Tiers</option>
+                        <option value="MUNDIAL">Tier Mundial</option>
+                        <option value="NACIONAL">Tier Nacional</option>
+                        <option value="S+">Tier S+</option>
+                        <option value="S">Tier S</option>
+                        <option value="A+">Tier A+</option>
+                        <option value="A">Tier A</option>
+                        <option value="B+">Tier B+</option>
+                        <option value="B">Tier B</option>
+                        <option value="C">Tier C</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <main class="table-wrapper">
+            <table id="rankingTable">
+                <thead>
+                    <tr>
+                        <th class="col-rank">#</th>
+                        <th class="col-player">JUGADOR</th>
+                        <th class="col-elo">ELO</th>
+                        <th class="col-tier">RANGO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for jugador in jugadores %}
+                    <tr class="rank-row">
+                        <td class="rank-num">{{ loop.index }}</td>
+                        <td class="player-cell">
+                            <div class="player-info">
+                                <img src="{{ jugador[3] if jugador|length > 3 and jugador[3] else 'https://cdn.discordapp.com/embed/avatars/0.png' }}" class="player-avatar">
+                                <span class="player-name">{{ jugador[0] }}</span>
+                            </div>
+                        </td>
+                        <td class="elo-cell">{{ jugador[1] }}</td>
+                        <td class="tier-cell">
+                            <span class="tier-tag {{ jugador[2].lower().replace('+', 'plus') }}">
+                                {{ jugador[2] }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </main>
+    </div>
+
+    <script>
+        function filterTable() {
+            const input = document.getElementById("searchInput").value.toUpperCase();
+            const tier = document.getElementById("tierFilter").value.toUpperCase();
+            const rows = document.querySelectorAll(".rank-row");
+
+            rows.forEach(row => {
+                const name = row.querySelector(".player-name").innerText.toUpperCase();
+                const playerTier = row.querySelector(".tier-tag").innerText.toUpperCase();
+                
+                const matchesName = name.includes(input);
+                const matchesTier = tier === "" || playerTier.includes(tier);
+
+                row.style.display = (matchesName && matchesTier) ? "" : "none";
+            });
+        }
+    </script>
+</body>
+</html>
