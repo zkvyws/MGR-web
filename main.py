@@ -10,11 +10,11 @@ app = Flask(__name__)
 
 # --- CONFIGURACIÓN DE RUTAS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Aseguramos que el bot y la web lean el mismo archivo en el directorio raíz
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "clan_data.db"))
 
 # --- CONFIGURACIÓN DEL BOT ---
-TOKEN = 'MTM0NjcxMjMzMzI4MzYyNzAzOQ.G4YUcw.rdiidTlNEnlsnAcPn3RJ8lq9pV4FG_U0lXX5YE'
+# Sacamos el token de las variables de entorno de Koyeb para evitar bloqueos
+TOKEN = os.environ.get('MTM0NjcxMjMzMzI4MzYyNzAzOQ.GUcNrk.Q49jmxtaAvWOWDAYMTBIZY36dZRRfoMKl9VnrE')
 
 intents = discord.Intents.default()
 intents.members = True 
@@ -42,28 +42,25 @@ JERARQUIA_ROLES = {
 def asegurar_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # username es la PK para que al sincronizar no se dupliquen
     cursor.execute('''CREATE TABLE IF NOT EXISTS members 
                       (username TEXT PRIMARY KEY, elo INTEGER, rango TEXT, avatar TEXT)''')
     conn.commit()
     conn.close()
 
-# --- RUTA WEB (Flask para Koyeb) ---
+# --- RUTA WEB (Flask) ---
 @app.route('/')
 def ranking():
     try:
         asegurar_db()
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        # Seleccionamos las 4 columnas en el orden exacto que tu HTML las pide
         cursor.execute("SELECT username, elo, rango, avatar FROM members ORDER BY elo DESC")
         jugadores = cursor.fetchall()
         conn.close()
-        
         activos = len(jugadores)
         return render_template('ranking.html', jugadores=jugadores, activos=activos)
     except Exception as e:
-        return f"Error en la base de datos: {e}"
+        return f"Error en la web: {e}"
 
 # --- EVENTOS Y COMANDOS DEL BOT ---
 @bot.event
@@ -74,36 +71,30 @@ async def on_ready():
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def sincronizar(ctx):
-    """Limpia la DB y añade a todos según sus roles de Discord"""
     asegurar_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM members") 
-    
     contador = 0
     for m in ctx.guild.members:
         if m.bot: continue
-        
         datos_rango = None
         for role_id, info in JERARQUIA_ROLES.items():
             if m.get_role(role_id):
                 datos_rango = info
                 break 
-
         if datos_rango:
             foto_url = str(m.display_avatar.url)
             cursor.execute("INSERT OR REPLACE INTO members (username, elo, rango, avatar) VALUES (?, ?, ?, ?)", 
                            (m.display_name, datos_rango["puntos"], datos_rango["nombre"], foto_url))
             contador += 1
-
     conn.commit()
     conn.close()
-    await ctx.send(f"🔄 **MGR.gg Sincronizado.** {contador} miembros añadidos.")
+    await ctx.send(f"🔄 **Sincronización completa.** {contador} miembros añadidos.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def add_elo(ctx, usuario: discord.Member, cantidad: int):
-    """Suma ELO a un usuario ya registrado"""
     asegurar_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -113,15 +104,14 @@ async def add_elo(ctx, usuario: discord.Member, cantidad: int):
         nuevo_elo = fila[0] + cantidad
         cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo_elo, usuario.display_name))
         conn.commit()
-        await ctx.send(f"📈 Se añadieron {cantidad} pts a **{usuario.display_name}**. Total: {nuevo_elo}")
+        await ctx.send(f"📈 +{cantidad} pts para **{usuario.display_name}**. Total: {nuevo_elo}")
     else:
-        await ctx.send("❌ El usuario no está en el ranking. Usa `!sincronizar` primero.")
+        await ctx.send("❌ Usuario no registrado. Usa `!sincronizar`.")
     conn.close()
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def rem_elo(ctx, usuario: discord.Member, cantidad: int):
-    """Resta ELO a un usuario ya registrado"""
     asegurar_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -131,19 +121,19 @@ async def rem_elo(ctx, usuario: discord.Member, cantidad: int):
         nuevo_elo = max(0, fila[0] - cantidad)
         cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo_elo, usuario.display_name))
         conn.commit()
-        await ctx.send(f"📉 Se quitaron {cantidad} pts a **{usuario.display_name}**. Total: {nuevo_elo}")
+        await ctx.send(f"📉 -{cantidad} pts para **{usuario.display_name}**. Total: {nuevo_elo}")
     else:
-        await ctx.send("❌ El usuario no está en el ranking.")
+        await ctx.send("❌ Usuario no registrado.")
     conn.close()
 
-# --- LANZAMIENTO DUAL (Thread para que no choque Flask con Discord) ---
+# --- LANZAMIENTO ---
 def run_discord():
+    if not TOKEN:
+        print("❌ ERROR: Falta la variable DISCORD_TOKEN en Koyeb")
+        return
     bot.run(TOKEN)
 
 if __name__ == "__main__":
-    # Inicia el bot de Discord en un hilo separado
     threading.Thread(target=run_discord).start()
-    
-    # Inicia la web de Flask en el hilo principal (requerido por Koyeb)
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port)
