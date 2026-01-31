@@ -13,8 +13,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "clan_data.db"))
 
 # --- CONFIGURACIÓN DEL BOT ---
-# Sacamos el token de las variables de entorno de Koyeb para evitar bloqueos
-TOKEN = os.environ.get('MTM0NjcxMjMzMzI4MzYyNzAzOQ.GUcNrk.Q49jmxtaAvWOWDAYMTBIZY36dZRRfoMKl9VnrE')
+# Obtenemos el token de forma segura desde el sistema (Koyeb)
+TOKEN = os.environ.get('MTM0NjcxMjMzMzI4MzYyNzAzOQ.GTdQvs.Jdr8D4BsxgPS-n8qt1xgD9eyohqFYvf_wqPnwo')
 
 intents = discord.Intents.default()
 intents.members = True 
@@ -47,7 +47,7 @@ def asegurar_db():
     conn.commit()
     conn.close()
 
-# --- RUTA WEB (Flask) ---
+# --- RUTA WEB (FLASK) ---
 @app.route('/')
 def ranking():
     try:
@@ -57,8 +57,7 @@ def ranking():
         cursor.execute("SELECT username, elo, rango, avatar FROM members ORDER BY elo DESC")
         jugadores = cursor.fetchall()
         conn.close()
-        activos = len(jugadores)
-        return render_template('ranking.html', jugadores=jugadores, activos=activos)
+        return render_template('ranking.html', jugadores=jugadores, activos=len(jugadores))
     except Exception as e:
         return f"Error en la web: {e}"
 
@@ -78,19 +77,14 @@ async def sincronizar(ctx):
     contador = 0
     for m in ctx.guild.members:
         if m.bot: continue
-        datos_rango = None
-        for role_id, info in JERARQUIA_ROLES.items():
-            if m.get_role(role_id):
-                datos_rango = info
-                break 
+        datos_rango = next((info for rid, info in JERARQUIA_ROLES.items() if m.get_role(rid)), None)
         if datos_rango:
-            foto_url = str(m.display_avatar.url)
-            cursor.execute("INSERT OR REPLACE INTO members (username, elo, rango, avatar) VALUES (?, ?, ?, ?)", 
-                           (m.display_name, datos_rango["puntos"], datos_rango["nombre"], foto_url))
+            cursor.execute("INSERT OR REPLACE INTO members VALUES (?, ?, ?, ?)", 
+                           (m.display_name, datos_rango["puntos"], datos_rango["nombre"], str(m.display_avatar.url)))
             contador += 1
     conn.commit()
     conn.close()
-    await ctx.send(f"🔄 **Sincronización completa.** {contador} miembros añadidos.")
+    await ctx.send(f"🔄 **Sincronizado.** {contador} miembros añadidos.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -101,12 +95,10 @@ async def add_elo(ctx, usuario: discord.Member, cantidad: int):
     cursor.execute("SELECT elo FROM members WHERE username = ?", (usuario.display_name,))
     fila = cursor.fetchone()
     if fila:
-        nuevo_elo = fila[0] + cantidad
-        cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo_elo, usuario.display_name))
+        nuevo = fila[0] + cantidad
+        cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo, usuario.display_name))
         conn.commit()
-        await ctx.send(f"📈 +{cantidad} pts para **{usuario.display_name}**. Total: {nuevo_elo}")
-    else:
-        await ctx.send("❌ Usuario no registrado. Usa `!sincronizar`.")
+        await ctx.send(f"📈 +{cantidad} pts para **{usuario.display_name}**. Total: {nuevo}")
     conn.close()
 
 @bot.command()
@@ -118,22 +110,19 @@ async def rem_elo(ctx, usuario: discord.Member, cantidad: int):
     cursor.execute("SELECT elo FROM members WHERE username = ?", (usuario.display_name,))
     fila = cursor.fetchone()
     if fila:
-        nuevo_elo = max(0, fila[0] - cantidad)
-        cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo_elo, usuario.display_name))
+        nuevo = max(0, fila[0] - cantidad)
+        cursor.execute("UPDATE members SET elo = ? WHERE username = ?", (nuevo, usuario.display_name))
         conn.commit()
-        await ctx.send(f"📉 -{cantidad} pts para **{usuario.display_name}**. Total: {nuevo_elo}")
-    else:
-        await ctx.send("❌ Usuario no registrado.")
+        await ctx.send(f"📉 -{cantidad} pts para **{usuario.display_name}**. Total: {nuevo}")
     conn.close()
 
-# --- LANZAMIENTO ---
+# --- LANZAMIENTO DUAL ---
 def run_discord():
     if not TOKEN:
-        print("❌ ERROR: Falta la variable DISCORD_TOKEN en Koyeb")
+        print("❌ ERROR: Falta DISCORD_TOKEN en las variables de entorno.")
         return
     bot.run(TOKEN)
 
 if __name__ == "__main__":
     threading.Thread(target=run_discord).start()
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8000)))
