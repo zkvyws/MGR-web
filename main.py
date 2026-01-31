@@ -13,8 +13,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(BASE_DIR, "clan_data.db"))
 
 # --- CONFIGURACIÓN DEL BOT ---
-# Obtenemos el token de forma segura desde el sistema (Koyeb)
-TOKEN = os.environ.get('MTM0NjcxMjMzMzI4MzYyNzAzOQ.GTdQvs.Jdr8D4BsxgPS-n8qt1xgD9eyohqFYvf_wqPnwo')
+# IMPORTANTE: Sacamos el token de las variables de entorno de Koyeb
+TOKEN = os.environ.get('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
 intents.members = True 
@@ -47,7 +47,7 @@ def asegurar_db():
     conn.commit()
     conn.close()
 
-# --- RUTA WEB (FLASK) ---
+# --- RUTA WEB (Flask para la página de Ranking) ---
 @app.route('/')
 def ranking():
     try:
@@ -77,14 +77,18 @@ async def sincronizar(ctx):
     contador = 0
     for m in ctx.guild.members:
         if m.bot: continue
-        datos_rango = next((info for rid, info in JERARQUIA_ROLES.items() if m.get_role(rid)), None)
+        datos_rango = None
+        for role_id, info in JERARQUIA_ROLES.items():
+            if m.get_role(role_id):
+                datos_rango = info
+                break 
         if datos_rango:
             cursor.execute("INSERT OR REPLACE INTO members VALUES (?, ?, ?, ?)", 
                            (m.display_name, datos_rango["puntos"], datos_rango["nombre"], str(m.display_avatar.url)))
             contador += 1
     conn.commit()
     conn.close()
-    await ctx.send(f"🔄 **Sincronizado.** {contador} miembros añadidos.")
+    await ctx.send(f"🔄 **Sincronización completa.** {contador} miembros añadidos.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
